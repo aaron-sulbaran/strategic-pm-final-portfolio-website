@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+.DS_Store
+*.local
+.vercel
+.vite
+*.log
+
+# Copied assets are produced by scripts/copy-assets.mjs at build time
+public/assets
