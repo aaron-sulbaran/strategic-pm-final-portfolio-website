@@ -6,13 +6,20 @@ interface VisitorRecord {
   createdAt: string;
 }
 
+interface VisitorStore {
+  visitors: VisitorRecord[];
+  ipHashes: string[];
+  updatedAt: string;
+}
+
 const NAME_MAX = 30;
 const MAX_PAYLOAD_BYTES = 1024;
-const FEED_KEY = 'portfolio:visitors:feed';
-const IP_PREFIX = 'portfolio:visitors:ip:';
+const MAX_VISITORS = 500;
+const MAX_IP_HASHES = 1000;
+const STORE_PATHNAME = 'portfolio/visitors.json';
 
 const BLOCKLIST = new Set<string>([
-  // Casual filter only. Add or trim as needed.
+  // Casual filter only.
   'fuck',
   'shit',
   'bitch',
@@ -46,34 +53,95 @@ function ipHash(ip: string): string {
   return createHash('sha256').update(ip).digest('hex').slice(0, 16);
 }
 
-async function loadKv() {
+function emptyStore(): VisitorStore {
+  return { visitors: [], ipHashes: [], updatedAt: new Date(0).toISOString() };
+}
+
+async function loadBlob() {
   try {
-    if (!process.env.KV_REST_API_URL && !process.env.KV_URL) return null;
-    const mod = await import('@vercel/kv').catch(() => null);
-    return mod?.kv ?? null;
+    if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
+    const mod = await import('@vercel/blob').catch(() => null);
+    return mod ?? null;
   } catch {
     return null;
   }
 }
 
+async function readStore(blob: NonNullable<Awaited<ReturnType<typeof loadBlob>>>): Promise<VisitorStore> {
+  try {
+    const listing = await blob.list({ prefix: STORE_PATHNAME, limit: 1 });
+    const match = listing.blobs.find((b) => b.pathname === STORE_PATHNAME);
+    if (!match) return emptyStore();
+    const downloadUrl =
+      typeof (match as { downloadUrl?: string }).downloadUrl === 'string'
+        ? (match as { downloadUrl: string }).downloadUrl
+        : match.url;
+    const res = await fetch(downloadUrl, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+    });
+    if (!res.ok) return emptyStore();
+    const data = (await res.json()) as Partial<VisitorStore>;
+    return {
+      visitors: Array.isArray(data.visitors) ? data.visitors.slice(0, MAX_VISITORS) : [],
+      ipHashes: Array.isArray(data.ipHashes) ? data.ipHashes.slice(0, MAX_IP_HASHES) : [],
+      updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : new Date(0).toISOString(),
+    };
+  } catch {
+    return emptyStore();
+  }
+}
+
+async function writeStore(
+  blob: NonNullable<Awaited<ReturnType<typeof loadBlob>>>,
+  store: VisitorStore,
+): Promise<void> {
+  // The store itself is configured as private on Vercel; individual puts still
+  // use access: 'public' because that is the only value the SDK accepts. The
+  // store-level privacy is what keeps the JSON unreachable without the token.
+  await blob.put(STORE_PATHNAME, JSON.stringify(store), {
+    access: 'public',
+    contentType: 'application/json',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    cacheControlMaxAge: 0,
+  });
+}
+
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    },
   });
 }
 
 export const config = { runtime: 'nodejs' };
 
 export default async function handler(req: Request) {
+  const url = new URL(req.url);
+
+  if (req.method === 'GET' && url.searchParams.get('debug') === '1') {
+    return json(200, {
+      hasToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+      tokenPrefix: process.env.BLOB_READ_WRITE_TOKEN
+        ? process.env.BLOB_READ_WRITE_TOKEN.slice(0, 12)
+        : null,
+      runtime: 'nodejs',
+    });
+  }
+
   if (req.method === 'GET') {
-    const kv = await loadKv();
-    if (!kv) return json(200, { visitors: [] });
+    const blob = await loadBlob();
+    if (!blob) return json(200, { visitors: [], persisted: false });
     try {
-      const items = (await kv.lrange<VisitorRecord>(FEED_KEY, 0, 99)) ?? [];
-      return json(200, { visitors: items });
-    } catch {
-      return json(200, { visitors: [] });
+      const store = await readStore(blob);
+      return json(200, { visitors: store.visitors.slice(0, 100), persisted: true });
+    } catch (err) {
+      console.error('[api/visitors] GET failed', err);
+      return json(200, { visitors: [], persisted: false });
     }
   }
 
@@ -106,26 +174,36 @@ export default async function handler(req: Request) {
     createdAt: new Date().toISOString(),
   };
 
-  const kv = await loadKv();
-  if (!kv) {
-    // No KV configured. Accept the submission so the UX completes; the
-    // localStorage flag on the client prevents re-prompting.
-    return json(200, { ok: true, persisted: false });
+  const blob = await loadBlob();
+  if (!blob) {
+    console.error('[api/visitors] BLOB_READ_WRITE_TOKEN missing or @vercel/blob unavailable');
+    return json(503, {
+      ok: false,
+      error:
+        'Visitor storage is not configured. Connect a Vercel Blob store and redeploy.',
+    });
   }
 
   try {
-    const ip = clientIp(req);
-    const ipKey = `${IP_PREFIX}${ipHash(ip)}`;
-    const seen = await kv.get<string>(ipKey);
-    if (seen) {
-      // Same IP already signed. Silent success.
+    const store = await readStore(blob);
+    const ipKey = ipHash(clientIp(req));
+
+    if (store.ipHashes.includes(ipKey)) {
       return json(200, { ok: true, persisted: true, deduped: true });
     }
-    await kv.lpush(FEED_KEY, record);
-    await kv.ltrim(FEED_KEY, 0, 99);
-    await kv.set(ipKey, '1', { ex: 60 * 60 * 24 * 365 });
+
+    const next: VisitorStore = {
+      visitors: [record, ...store.visitors].slice(0, MAX_VISITORS),
+      ipHashes: [ipKey, ...store.ipHashes].slice(0, MAX_IP_HASHES),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await writeStore(blob, next);
     return json(200, { ok: true, persisted: true });
-  } catch {
-    return json(200, { ok: true, persisted: false });
+  } catch (err) {
+    console.error('[api/visitors] POST failed', err);
+    const message =
+      err instanceof Error && err.message ? err.message : 'Unknown blob error';
+    return json(500, { ok: false, error: `Blob write failed: ${message}` });
   }
 }
