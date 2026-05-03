@@ -1,4 +1,42 @@
+/// <reference types="vite/client" />
+// Two icon sources, dispatched in this order at render time:
+//
+// 1. Hand-traced inline SVGs in PATHS below. Used for high-traffic chrome
+//    glyphs (chevrons, search, close, etc.) so they read crisp at any size.
+//
+// 2. SF Symbol SVG exports auto-discovered from src/assets/sf-symbols/.
+//    Drop a file at src/assets/sf-symbols/{name}.svg (e.g.
+//    src/assets/sf-symbols/heart.svg) and it lights up automatically
+//    wherever <Icon name="heart" /> is rendered. No registration needed.
+//    The dotted SF Symbol naming convention works as filenames on macOS;
+//    if your filesystem complains, use the same name with dots and the
+//    glob will pick it up.
+//
+// 3. Placeholder rect with the symbol name as text, used only when neither
+//    a hand-traced glyph nor a dropped SVG file is available. This is the
+//    visual cue to drop the asset in.
+
+// Vite glob: `eager: true` inlines all SVGs at build time, `as: 'url'`
+// returns the asset URL string. New files added to the folder are picked
+// up on the next dev rebuild or production build.
+const SF_SYMBOL_FILES = import.meta.glob('../assets/sf-symbols/*.svg', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
+
+// Index by symbol name, e.g. 'heart' -> '/assets/sf-symbols/heart.svg'.
+const SF_SYMBOL_URLS: Record<string, string> = {};
+for (const [path, url] of Object.entries(SF_SYMBOL_FILES)) {
+  const name = path.split('/').pop()?.replace(/\.svg$/, '');
+  if (name) SF_SYMBOL_URLS[name] = url;
+}
+
+// Names referenced by hand-traced glyphs OR by structured content data files.
+// New names can be added freely; the dropped SVG (if any) wins, otherwise
+// the type still validates and a placeholder rect renders.
 export type SFSymbol =
+  // Chrome glyphs (hand-traced inline)
   | 'chevron.left'
   | 'chevron.right'
   | 'info.circle'
@@ -13,7 +51,24 @@ export type SFSymbol =
   | 'doc.richtext'
   | 'photo'
   | 'play.rectangle.fill'
-  | 'arrow.up.right.square';
+  | 'arrow.up.right.square'
+  // Structured artifact glyphs (drop SVGs at src/assets/sf-symbols/{name}.svg)
+  | 'link'
+  | 'gearshape'
+  | 'cube.box'
+  | 'gift'
+  | 'heart'
+  | 'paperplane'
+  | 'person.3'
+  | 'arrow.down.right.circle'
+  | 'arrow.up.right.circle'
+  | 'sparkles'
+  | 'shield'
+  | 'person.crop.circle'
+  | 'star'
+  | 'exclamationmark.triangle'
+  | 'exclamationmark.bubble'
+  | 'chart.line.uptrend.xyaxis';
 
 interface IconProps {
   name: SFSymbol;
@@ -111,14 +166,31 @@ const PATHS: Partial<Record<SFSymbol, JSX.Element>> = {
 /**
  * SF Symbol slot.
  *
- * For high-traffic UI symbols, we ship hand-traced SVG glyphs (defined in
- * PATHS above) so the chrome reads as production-ready Apple-style iconography.
- * For symbols not yet traced, we fall back to a labeled placeholder rect.
+ * Resolution order:
+ *   1. Dropped SVG file at src/assets/sf-symbols/{name}.svg (auto-discovered)
+ *   2. Hand-traced inline glyph in PATHS above
+ *   3. Labelled placeholder rect with the symbol name
  *
- * To swap the placeholder for a real symbol later: drop the SF Symbols .svg
- * export at /public/assets/icons/{name}.svg and add an <img> branch here.
+ * To register a new symbol: just drop the SVG export. No code changes
+ * required if the symbol name already appears in the SFSymbol type. To
+ * add a brand-new name, extend the SFSymbol union above.
  */
 export function Icon({ name, size = 22, className = '', title }: IconProps) {
+  const dropUrl = SF_SYMBOL_URLS[name];
+  if (dropUrl) {
+    return (
+      <img
+        src={dropUrl}
+        width={size}
+        height={size}
+        alt={title ?? ''}
+        aria-hidden={title ? undefined : true}
+        className={className}
+        style={{ display: 'inline-block', verticalAlign: 'middle' }}
+      />
+    );
+  }
+
   const glyph = PATHS[name];
   return (
     <svg

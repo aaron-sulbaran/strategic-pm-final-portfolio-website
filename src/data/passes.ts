@@ -101,7 +101,7 @@ export const passes: Pass[] = [
     id: 'value-proposition-canvas',
     number: 2,
     title: 'Value Proposition Canvas',
-    shortLabel: 'VPC',
+    shortLabel: 'Value Proposition Canvas',
     category: 'Discovery',
     caption:
       'Customer profile and value map for the Apple Wallet user, mapping pains and gains to product features.',
@@ -148,7 +148,7 @@ export const passes: Pass[] = [
     id: 'opportunity-solution-tree',
     number: 4,
     title: 'Opportunity Solution Tree',
-    shortLabel: 'OST',
+    shortLabel: 'Opportunity Solution Tree',
     category: 'Discovery',
     caption:
       'Outcome-driven tree connecting the chosen North Star Metric to opportunities, solutions, and experiments.',
@@ -222,8 +222,8 @@ export const passes: Pass[] = [
   {
     id: 'prd',
     number: 7,
-    title: 'PRD',
-    shortLabel: 'PRD',
+    title: 'Product Requirements Document',
+    shortLabel: 'Product Requirements Document',
     category: 'Definition',
     caption:
       'Product requirements document for the chosen Apple Wallet feature, including goals, scope, and success metrics.',
