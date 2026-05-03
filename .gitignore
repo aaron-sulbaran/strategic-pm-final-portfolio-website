@@ -10,3 +10,8 @@ dist-ssr
 # Copied assets are produced by scripts/copy-assets.mjs at build time
 public/assets
 .env*.local
+
+# Private agent/workflow files (use AGENTS.template.md for fork scaffolding)
+AGENTS.md
+.claude/
+.cursor/rules/

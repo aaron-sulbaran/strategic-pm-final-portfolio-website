@@ -298,6 +298,13 @@ export const passes: Pass[] = [
         rendererComponent: 'RoadmapV2',
         dataSource: 'AaronSulbaran_AppleWallet_RoadmapV2',
       },
+      {
+        title: 'Productboard Roadmap',
+        subtitle: 'Original Roadmap Assignment',
+        type: 'image',
+        src: '/assets/images/AaronSulbaran_AppleWallet_ProductboardRoadmap.png',
+        isExtra: true,
+      },
     ],
   },
   {
