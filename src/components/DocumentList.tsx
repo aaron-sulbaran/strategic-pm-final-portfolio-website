@@ -17,6 +17,7 @@ const DEFAULT_ICON: Record<PassDocument['type'], SFSymbol> = {
   iframe: 'arrow.up.right.square',
   external: 'arrow.up.right.square',
   video: 'play.rectangle.fill',
+  structured: 'doc.richtext',
 };
 
 const DEFAULT_SUBTITLE: Record<PassDocument['type'], string> = {
@@ -26,6 +27,7 @@ const DEFAULT_SUBTITLE: Record<PassDocument['type'], string> = {
   iframe: 'External link',
   external: 'External link',
   video: 'Video',
+  structured: 'Interactive view',
 };
 
 export function DocumentList({
@@ -46,7 +48,7 @@ export function DocumentList({
       <div className="rounded-card-content bg-bg-card-white shadow-card overflow-hidden">
         {documents.map((doc, i) => (
           <Row
-            key={`${doc.src}-${i}`}
+            key={`${doc.src ?? doc.dataSource ?? doc.title}-${i}`}
             ref={(el) => registerRowRef?.(i, el)}
             doc={doc}
             tintBg={tintBg}

@@ -11,6 +11,7 @@ import { DocumentViewer } from './DocumentViewer';
 import { ImageViewer } from './ImageViewer';
 import { PdfViewer } from './PdfViewer';
 import { VideoViewer } from './VideoViewer';
+import { StructuredViewer } from './structured/StructuredViewer';
 
 export function PassDetail() {
   const { id } = useParams<{ id: string }>();
@@ -38,7 +39,9 @@ export function PassDetail() {
     !pass.reflection || pass.reflection.trim() === '[REFLECTION TBD]';
   const primaryDoc = pass.documents[0];
   const showMetadataStrip =
-    !pass.isVisitorPass && primaryDoc && primaryDoc.type === 'markdown';
+    !pass.isVisitorPass &&
+    primaryDoc &&
+    (primaryDoc.type === 'markdown' || primaryDoc.type === 'structured');
 
   const activeDoc = activeIndex != null ? pass.documents[activeIndex] : null;
 
@@ -46,7 +49,7 @@ export function PassDetail() {
     const idx = pass!.documents.findIndex((d) => d === _doc);
     if (idx < 0) return;
     if (_doc.type === 'external' || _doc.type === 'iframe') {
-      window.open(_doc.src, '_blank', 'noopener,noreferrer');
+      if (_doc.src) window.open(_doc.src, '_blank', 'noopener,noreferrer');
       return;
     }
     setActiveIndex(idx);
@@ -93,7 +96,7 @@ export function PassDetail() {
 
             {/* Metadata strip (for markdown-primary passes only) */}
             {showMetadataStrip && primaryDoc && (
-              <MetadataHeaderStrip src={primaryDoc.src} />
+              <MetadataHeaderStrip doc={primaryDoc} />
             )}
 
             {/* Reflection paragraph (only when set) */}
@@ -147,13 +150,21 @@ export function PassDetail() {
 function ViewerForDocument({ doc, onClose }: { doc: PassDocument; onClose: () => void }) {
   switch (doc.type) {
     case 'markdown':
-      return <DocumentViewer src={doc.src} onClose={onClose} />;
+      return doc.src ? <DocumentViewer src={doc.src} onClose={onClose} /> : null;
     case 'image':
-      return <ImageViewer src={doc.src} alt={doc.title} onClose={onClose} />;
+      return doc.src ? <ImageViewer src={doc.src} alt={doc.title} onClose={onClose} /> : null;
     case 'pdf':
-      return <PdfViewer src={doc.src} title={doc.title} onClose={onClose} />;
+      return doc.src ? <PdfViewer src={doc.src} title={doc.title} onClose={onClose} /> : null;
     case 'video':
-      return <VideoViewer src={doc.src} title={doc.title} onClose={onClose} />;
+      return doc.src ? <VideoViewer src={doc.src} title={doc.title} onClose={onClose} /> : null;
+    case 'structured':
+      return doc.rendererComponent && doc.dataSource ? (
+        <StructuredViewer
+          rendererComponent={doc.rendererComponent}
+          dataSource={doc.dataSource}
+          onClose={onClose}
+        />
+      ) : null;
     default:
       return null;
   }

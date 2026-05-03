@@ -1,4 +1,11 @@
-export type DocumentType = 'markdown' | 'pdf' | 'image' | 'iframe' | 'external' | 'video';
+export type DocumentType =
+  | 'markdown'
+  | 'pdf'
+  | 'image'
+  | 'iframe'
+  | 'external'
+  | 'video'
+  | 'structured';
 
 export type Category =
   | 'Discovery'
@@ -8,11 +15,36 @@ export type Category =
   | 'Outcomes'
   | 'Guestbook';
 
+// Renderer keys for the seven custom artifact renderers.
+// PassDetail.tsx maps these strings to actual React components.
+export type StructuredRendererKey =
+  | 'BusinessModelCanvas'
+  | 'ValuePropositionCanvas'
+  | 'VisionBoard'
+  | 'OpportunitySolutionTree'
+  | 'KanoAnalysis'
+  | 'ProductScorecard'
+  | 'RoadmapV2';
+
+export type StructuredDataSourceKey =
+  | 'AaronSulbaran_AppleWallet_BusinessModelCanvas'
+  | 'AaronSulbaran_AppleWallet_ValuePropositionCanvas'
+  | 'AaronSulbaran_AppleWallet_VisionBoard'
+  | 'AaronSulbaran_AppleWallet_OpportunitySolutionTree'
+  | 'AaronSulbaran_AppleWallet_KanoAnalysis'
+  | 'AaronSulbaran_AppleWallet_ProductScorecard'
+  | 'AaronSulbaran_AppleWallet_RoadmapV2';
+
 export interface PassDocument {
   title: string;
   subtitle?: string;
   type: DocumentType;
-  src: string;
+  /** Required for markdown, pdf, image, iframe, external, video. */
+  src?: string;
+  /** Required for type === 'structured'. */
+  rendererComponent?: StructuredRendererKey;
+  /** Required for type === 'structured'. */
+  dataSource?: StructuredDataSourceKey;
   isExtra?: boolean;
   iconSymbol?: string;
 }
@@ -59,8 +91,9 @@ export const passes: Pass[] = [
     documents: [
       {
         title: 'Business Model Canvas',
-        type: 'pdf',
-        src: '/assets/pdfs/AaronSulbaran_AppleWallet_BusinessModelCanvas.pdf',
+        type: 'structured',
+        rendererComponent: 'BusinessModelCanvas',
+        dataSource: 'AaronSulbaran_AppleWallet_BusinessModelCanvas',
       },
     ],
   },
@@ -81,8 +114,9 @@ export const passes: Pass[] = [
     documents: [
       {
         title: 'Value Proposition Canvas',
-        type: 'pdf',
-        src: '/assets/pdfs/AaronSulbaran_AppleWallet_ValuePropositionCanvas.pdf',
+        type: 'structured',
+        rendererComponent: 'ValuePropositionCanvas',
+        dataSource: 'AaronSulbaran_AppleWallet_ValuePropositionCanvas',
       },
     ],
   },
@@ -91,9 +125,9 @@ export const passes: Pass[] = [
     number: 3,
     title: 'Product Vision Board',
     shortLabel: 'Vision Board',
-    category: 'Definition',
+    category: 'Discovery',
     caption:
-      'Future-state framing for Apple Wallet, captured as a visual one-page vision board.',
+      'Future-state framing for Apple Wallet, captured as a Pichler vision board.',
     cardStyle: {
       background:
         'linear-gradient(135deg, #FF6E7F 0%, #BFE9FF 25%, #C5A3FF 50%, #FFD580 75%, #B5F5EC 100%)',
@@ -104,8 +138,9 @@ export const passes: Pass[] = [
     documents: [
       {
         title: 'Product Vision Board',
-        type: 'image',
-        src: '/assets/images/AaronSulbaran_AppleWallet_VisionBoard.png',
+        type: 'structured',
+        rendererComponent: 'VisionBoard',
+        dataSource: 'AaronSulbaran_AppleWallet_VisionBoard',
       },
     ],
   },
@@ -114,7 +149,7 @@ export const passes: Pass[] = [
     number: 4,
     title: 'Opportunity Solution Tree',
     shortLabel: 'OST',
-    category: 'Definition',
+    category: 'Discovery',
     caption:
       'Outcome-driven tree connecting the chosen North Star Metric to opportunities, solutions, and experiments.',
     cardStyle: {
@@ -126,8 +161,9 @@ export const passes: Pass[] = [
     documents: [
       {
         title: 'Opportunity Solution Tree',
-        type: 'image',
-        src: '/assets/images/AaronSulbaran_AppleWallet_OST.png',
+        type: 'structured',
+        rendererComponent: 'OpportunitySolutionTree',
+        dataSource: 'AaronSulbaran_AppleWallet_OpportunitySolutionTree',
       },
     ],
   },
@@ -136,7 +172,7 @@ export const passes: Pass[] = [
     number: 5,
     title: 'Customer Letter',
     shortLabel: 'Customer Letter',
-    category: 'Definition',
+    category: 'Discovery',
     caption:
       'A working-backwards customer letter capturing the future-state Apple Wallet experience, paired with an internal response.',
     cardStyle: {
@@ -188,7 +224,7 @@ export const passes: Pass[] = [
     number: 7,
     title: 'PRD',
     shortLabel: 'PRD',
-    category: 'Delivery',
+    category: 'Definition',
     caption:
       'Product requirements document for the chosen Apple Wallet feature, including goals, scope, and success metrics.',
     cardStyle: {
@@ -206,42 +242,13 @@ export const passes: Pass[] = [
     ],
   },
   {
-    id: 'kano-analysis',
+    id: 'analysis',
     number: 8,
-    title: 'Kano Analysis',
-    shortLabel: 'Kano',
+    title: 'Analysis',
+    shortLabel: 'Analysis',
     category: 'Prioritization',
     caption:
-      'Kano model categorizing proposed Apple Wallet features as basic, performance, or delight to inform prioritization.',
-    cardStyle: {
-      background: 'linear-gradient(135deg, #FF7E5F 0%, #FEB47B 100%)',
-      textColor: 'black',
-      tint: 'rgba(255, 126, 95, 0.14)',
-      tintFg: '#B14A2C',
-    },
-    documents: [
-      {
-        title: 'Kano Analysis',
-        type: 'image',
-        src: '/assets/images/AaronSulbaran_AppleWallet_Kano.png',
-      },
-      {
-        title: 'RICE Prioritization',
-        subtitle: 'Companion prioritization method',
-        type: 'markdown',
-        src: '/assets/markdown/AaronSulbaran_AppleWallet_RICE.md',
-        isExtra: true,
-      },
-    ],
-  },
-  {
-    id: 'rice-prioritization',
-    number: 9,
-    title: 'RICE Prioritization',
-    shortLabel: 'RICE',
-    category: 'Prioritization',
-    caption:
-      'RICE scoring (Reach, Impact, Confidence, Effort) applied to the candidate Apple Wallet feature backlog.',
+      'Two prioritization lenses applied to the Apple Wallet backlog: RICE for business leverage, Kano for user satisfaction.',
     cardStyle: {
       background: 'linear-gradient(135deg, #6B0F1A 0%, #B22A2F 100%)',
       textColor: 'white',
@@ -255,29 +262,29 @@ export const passes: Pass[] = [
         src: '/assets/markdown/AaronSulbaran_AppleWallet_RICE.md',
       },
       {
+        title: 'Kano Analysis',
+        subtitle: 'Companion satisfaction lens',
+        type: 'structured',
+        rendererComponent: 'KanoAnalysis',
+        dataSource: 'AaronSulbaran_AppleWallet_KanoAnalysis',
+      },
+      {
         title: 'Initial Requirements',
         subtitle: 'Effort estimation rationale',
         type: 'markdown',
         src: '/assets/markdown/AaronSulbaran_AppleWallet_InitialRequirements.md',
         isExtra: true,
       },
-      {
-        title: 'Kano Analysis',
-        subtitle: 'Companion prioritization method',
-        type: 'image',
-        src: '/assets/images/AaronSulbaran_AppleWallet_Kano.png',
-        isExtra: true,
-      },
     ],
   },
   {
     id: 'roadmap',
-    number: 10,
+    number: 9,
     title: 'Roadmap',
     shortLabel: 'Roadmap',
     category: 'Delivery',
     caption:
-      'Outcome-aligned roadmap sequencing the prioritized Apple Wallet bets across the next four quarters.',
+      'Theme-based, outcome-anchored roadmap sequencing the prioritized Apple Wallet bets across three horizons.',
     cardStyle: {
       background: 'linear-gradient(135deg, #4DA8DA 0%, #7FCBE8 100%)',
       textColor: 'white',
@@ -286,15 +293,16 @@ export const passes: Pass[] = [
     },
     documents: [
       {
-        title: 'Product Roadmap',
-        type: 'image',
-        src: '/assets/images/AaronSulbaran_AppleWallet_ProductboardRoadmap.png',
+        title: 'Strategic Roadmap',
+        type: 'structured',
+        rendererComponent: 'RoadmapV2',
+        dataSource: 'AaronSulbaran_AppleWallet_RoadmapV2',
       },
     ],
   },
   {
     id: 'prototype',
-    number: 11,
+    number: 10,
     title: 'Prototype',
     shortLabel: 'Prototype',
     category: 'Delivery',
@@ -313,6 +321,36 @@ export const passes: Pass[] = [
         subtitle: 'Health insurance pass flow video',
         type: 'video',
         src: '/assets/extras/AaronSulbaran_AppleWallet_HealthInsurancePrototype.mp4',
+      },
+    ],
+  },
+  {
+    id: 'product-scorecard',
+    number: 11,
+    title: 'Product Scorecard',
+    shortLabel: 'Scorecard',
+    category: 'Delivery',
+    caption:
+      'Balanced product scorecard with the Apple Wallet North Star, financial, customer, product, and team-health indicators.',
+    cardStyle: {
+      background: 'linear-gradient(135deg, #0F4C5C 0%, #1B6B7E 100%)',
+      textColor: 'white',
+      tint: 'rgba(27, 107, 126, 0.12)',
+      tintFg: '#0F4C5C',
+    },
+    documents: [
+      {
+        title: 'Product Scorecard',
+        type: 'structured',
+        rendererComponent: 'ProductScorecard',
+        dataSource: 'AaronSulbaran_AppleWallet_ProductScorecard',
+      },
+      {
+        title: 'North Star Metric',
+        subtitle: 'Detailed write-up',
+        type: 'markdown',
+        src: '/assets/markdown/AaronSulbaran_AppleWallet_NorthStarMetric.md',
+        isExtra: true,
       },
     ],
   },
@@ -338,36 +376,11 @@ export const passes: Pass[] = [
       },
     ],
   },
-  {
-    id: 'north-star-metric',
-    // North Star Metric is itself an EXTRA — not on the professor's required list.
-    // The pass-level marking is irrelevant; the row inside carries the EXTRA pill.
-    number: 13,
-    title: 'North Star Metric',
-    shortLabel: 'North Star',
-    category: 'Outcomes',
-    caption:
-      'A single metric that captures whether Apple Wallet is winning at its real job, plus the input clusters that move it.',
-    cardStyle: {
-      background: 'linear-gradient(135deg, #0F4C5C 0%, #1B6B7E 100%)',
-      textColor: 'white',
-      tint: 'rgba(27, 107, 126, 0.12)',
-      tintFg: '#0F4C5C',
-    },
-    documents: [
-      {
-        title: 'North Star Metric',
-        type: 'markdown',
-        src: '/assets/markdown/AaronSulbaran_AppleWallet_NorthStarMetric.md',
-        isExtra: true,
-      },
-    ],
-  },
 ];
 
 export const visitorPass: Pass = {
   id: 'visitors',
-  number: 14,
+  number: 13,
   title: 'Visitors',
   shortLabel: 'Visitors',
   category: 'Guestbook',
