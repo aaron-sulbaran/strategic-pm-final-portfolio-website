@@ -9,3 +9,4 @@ dist-ssr
 
 # Copied assets are produced by scripts/copy-assets.mjs at build time
 public/assets
+.env*.local

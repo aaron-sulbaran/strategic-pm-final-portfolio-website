@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 interface VisitorRecord {
   firstName: string;
@@ -19,7 +20,6 @@ const MAX_IP_HASHES = 1000;
 const STORE_PATHNAME = 'portfolio/visitors.json';
 
 const BLOCKLIST = new Set<string>([
-  // Casual filter only.
   'fuck',
   'shit',
   'bitch',
@@ -43,10 +43,13 @@ function isLikelyValid(value: string): boolean {
   return isClean(trimmed);
 }
 
-function clientIp(req: Request): string {
-  const forwarded = req.headers.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0]!.trim();
-  return req.headers.get('x-real-ip') ?? 'unknown';
+function clientIp(req: VercelRequest): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  const forwardedHeader = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  if (forwardedHeader) return forwardedHeader.split(',')[0]!.trim();
+  const realIp = req.headers['x-real-ip'];
+  if (typeof realIp === 'string') return realIp;
+  return 'unknown';
 }
 
 function ipHash(ip: string): string {
@@ -96,76 +99,138 @@ async function writeStore(
   blob: NonNullable<Awaited<ReturnType<typeof loadBlob>>>,
   store: VisitorStore,
 ): Promise<void> {
-  // The store itself is configured as private on Vercel; individual puts still
-  // use access: 'public' because that is the only value the SDK accepts. The
-  // store-level privacy is what keeps the JSON unreachable without the token.
+  // Store is configured as private on Vercel; the SDK now requires the put
+  // to declare access: 'private' to match. The TS types still mark this as
+  // a string-union mismatch on some versions, hence the cast.
   await blob.put(STORE_PATHNAME, JSON.stringify(store), {
-    access: 'public',
+    access: 'private',
     contentType: 'application/json',
     addRandomSuffix: false,
     allowOverwrite: true,
     cacheControlMaxAge: 0,
-  });
+  } as unknown as Parameters<typeof blob.put>[2]);
 }
 
-function json(status: number, body: unknown) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-store',
-    },
-  });
+function send(res: VercelResponse, status: number, body: unknown): void {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(status).send(JSON.stringify(body));
 }
 
 export const config = { runtime: 'nodejs' };
 
-export default async function handler(req: Request) {
-  const url = new URL(req.url);
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const isDebug =
+    req.method === 'GET' &&
+    typeof req.query.debug === 'string' &&
+    req.query.debug === '1';
 
-  if (req.method === 'GET' && url.searchParams.get('debug') === '1') {
-    return json(200, {
+  if (isDebug) {
+    return send(res, 200, {
       hasToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
       tokenPrefix: process.env.BLOB_READ_WRITE_TOKEN
         ? process.env.BLOB_READ_WRITE_TOKEN.slice(0, 12)
         : null,
       runtime: 'nodejs',
+      method: req.method,
     });
+  }
+
+  // One-shot removal of the "Claude Test" smoke-test row added during debugging.
+  if (req.method === 'GET' && req.query.removeTestRow === '1') {
+    const blob = await loadBlob();
+    if (!blob) return send(res, 503, { ok: false, error: 'Blob unavailable' });
+    try {
+      const store = await readStore(blob);
+      const filtered = store.visitors.filter(
+        (v) =>
+          !(
+            v.firstName.toLowerCase() === 'claude' &&
+            v.lastName.toLowerCase() === 'test'
+          ),
+      );
+      const removed = store.visitors.length - filtered.length;
+      const next: VisitorStore = {
+        visitors: filtered,
+        ipHashes: store.ipHashes,
+        updatedAt: new Date().toISOString(),
+      };
+      await writeStore(blob, next);
+      return send(res, 200, { ok: true, removed });
+    } catch (err) {
+      console.error('[api/visitors] removeTestRow failed', err);
+      const message =
+        err instanceof Error && err.message ? err.message : 'Unknown blob error';
+      return send(res, 500, { ok: false, error: `Remove failed: ${message}` });
+    }
+  }
+
+  // Non-destructive: removes only the requester's own IP hash from the dedup
+  // list so the same browser can sign once. Does NOT touch any visitor names.
+  if (req.method === 'GET' && req.query.clearMyDedup === '1') {
+    const blob = await loadBlob();
+    if (!blob) return send(res, 503, { ok: false, error: 'Blob unavailable' });
+    try {
+      const store = await readStore(blob);
+      const ipKey = ipHash(clientIp(req));
+      if (!store.ipHashes.includes(ipKey)) {
+        return send(res, 200, { ok: true, cleared: false, reason: 'not in dedup list' });
+      }
+      const next: VisitorStore = {
+        visitors: store.visitors,
+        ipHashes: store.ipHashes.filter((h) => h !== ipKey),
+        updatedAt: new Date().toISOString(),
+      };
+      await writeStore(blob, next);
+      return send(res, 200, { ok: true, cleared: true });
+    } catch (err) {
+      console.error('[api/visitors] clearMyDedup failed', err);
+      const message =
+        err instanceof Error && err.message ? err.message : 'Unknown blob error';
+      return send(res, 500, { ok: false, error: `Clear failed: ${message}` });
+    }
   }
 
   if (req.method === 'GET') {
     const blob = await loadBlob();
-    if (!blob) return json(200, { visitors: [], persisted: false });
+    if (!blob) return send(res, 200, { visitors: [], persisted: false });
     try {
       const store = await readStore(blob);
-      return json(200, { visitors: store.visitors.slice(0, 100), persisted: true });
+      return send(res, 200, {
+        visitors: store.visitors.slice(0, 100),
+        persisted: true,
+      });
     } catch (err) {
       console.error('[api/visitors] GET failed', err);
-      return json(200, { visitors: [], persisted: false });
+      return send(res, 200, { visitors: [], persisted: false });
     }
   }
 
   if (req.method !== 'POST') {
-    return json(405, { ok: false, error: 'Method not allowed' });
+    return send(res, 405, { ok: false, error: 'Method not allowed' });
   }
 
-  const contentLength = Number(req.headers.get('content-length') ?? '0');
+  const contentLengthHeader = req.headers['content-length'];
+  const contentLength = Number(
+    Array.isArray(contentLengthHeader) ? contentLengthHeader[0] : contentLengthHeader ?? '0',
+  );
   if (contentLength > MAX_PAYLOAD_BYTES) {
-    return json(413, { ok: false, error: 'Payload too large' });
+    return send(res, 413, { ok: false, error: 'Payload too large' });
   }
 
-  let body: { firstName?: unknown; lastName?: unknown };
-  try {
-    body = await req.json();
-  } catch {
-    return json(400, { ok: false, error: 'Invalid JSON' });
-  }
+  // @vercel/node auto-parses JSON bodies into req.body when Content-Type is application/json.
+  const rawBody: unknown = req.body;
+  const body: { firstName?: unknown; lastName?: unknown } =
+    rawBody && typeof rawBody === 'object' ? (rawBody as Record<string, unknown>) : {};
 
   const firstName = typeof body.firstName === 'string' ? body.firstName.trim() : '';
   const lastName = typeof body.lastName === 'string' ? body.lastName.trim() : '';
 
   if (!isLikelyValid(firstName) || !isLikelyValid(lastName)) {
-    return json(400, { ok: false, error: 'Please enter a real first and last name.' });
+    return send(res, 400, {
+      ok: false,
+      error: 'Please enter a real first and last name.',
+    });
   }
 
   const record: VisitorRecord = {
@@ -177,10 +242,9 @@ export default async function handler(req: Request) {
   const blob = await loadBlob();
   if (!blob) {
     console.error('[api/visitors] BLOB_READ_WRITE_TOKEN missing or @vercel/blob unavailable');
-    return json(503, {
+    return send(res, 503, {
       ok: false,
-      error:
-        'Visitor storage is not configured. Connect a Vercel Blob store and redeploy.',
+      error: 'Visitor storage is not configured. Connect a Vercel Blob store and redeploy.',
     });
   }
 
@@ -188,8 +252,31 @@ export default async function handler(req: Request) {
     const store = await readStore(blob);
     const ipKey = ipHash(clientIp(req));
 
+    // Same first+last (case-insensitive) already on the wall: keep the original
+    // entry, don't create a duplicate row. Same browser/IP will still dedup via
+    // the ipHashes path; this catches the cross-device case (same person signs
+    // from a phone and a laptop, both should resolve to one name).
+    const incomingKey = `${firstName.toLowerCase()}|${lastName.toLowerCase()}`;
+    const nameAlreadyOnWall = store.visitors.some(
+      (v) =>
+        `${v.firstName.toLowerCase()}|${v.lastName.toLowerCase()}` === incomingKey,
+    );
+
+    if (nameAlreadyOnWall) {
+      // Still record the IP so the same browser doesn't keep retrying writes.
+      if (!store.ipHashes.includes(ipKey)) {
+        const next: VisitorStore = {
+          visitors: store.visitors,
+          ipHashes: [ipKey, ...store.ipHashes].slice(0, MAX_IP_HASHES),
+          updatedAt: new Date().toISOString(),
+        };
+        await writeStore(blob, next);
+      }
+      return send(res, 200, { ok: true, persisted: true, deduped: 'name' });
+    }
+
     if (store.ipHashes.includes(ipKey)) {
-      return json(200, { ok: true, persisted: true, deduped: true });
+      return send(res, 200, { ok: true, persisted: true, deduped: true });
     }
 
     const next: VisitorStore = {
@@ -199,11 +286,11 @@ export default async function handler(req: Request) {
     };
 
     await writeStore(blob, next);
-    return json(200, { ok: true, persisted: true });
+    return send(res, 200, { ok: true, persisted: true });
   } catch (err) {
     console.error('[api/visitors] POST failed', err);
     const message =
       err instanceof Error && err.message ? err.message : 'Unknown blob error';
-    return json(500, { ok: false, error: `Blob write failed: ${message}` });
+    return send(res, 500, { ok: false, error: `Blob write failed: ${message}` });
   }
 }

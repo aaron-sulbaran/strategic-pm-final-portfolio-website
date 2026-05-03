@@ -1,24 +1,34 @@
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { findPassById } from '../data/passes';
+import { AnimatePresence, motion } from 'framer-motion';
+import { findPassById, type PassDocument } from '../data/passes';
 import { PassCard } from './PassCard';
 import { BackButton } from './BackButton';
-import { AssetEmbed } from './AssetEmbed';
 import { VisitorFeed } from './VisitorFeed';
+import { DocumentList } from './DocumentList';
+import { MetadataHeaderStrip } from './MetadataHeaderStrip';
+import { DocumentViewer } from './DocumentViewer';
+import { ImageViewer } from './ImageViewer';
+import { PdfViewer } from './PdfViewer';
+import { VideoViewer } from './VideoViewer';
 
 export function PassDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const pass = id ? findPassById(id) : undefined;
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const rowRefs = useRef<Map<number, HTMLButtonElement | null>>(new Map());
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [id]);
 
   if (!pass) {
     return (
       <div className="min-h-screen w-full bg-bg-app flex flex-col items-center">
         <div className="w-full max-w-wallet flex flex-col px-5 pt-14">
           <BackButton onClick={() => navigate('/')} />
-          <p className="font-sf text-[17px] text-text-secondary mt-8">
-            Pass not found.
-          </p>
+          <p className="font-sf text-[17px] text-text-secondary mt-8">Pass not found.</p>
         </div>
       </div>
     );
@@ -26,17 +36,40 @@ export function PassDetail() {
 
   const reflectionIsPlaceholder =
     !pass.reflection || pass.reflection.trim() === '[REFLECTION TBD]';
+  const primaryDoc = pass.documents[0];
+  const showMetadataStrip =
+    !pass.isVisitorPass && primaryDoc && primaryDoc.type === 'markdown';
+
+  const activeDoc = activeIndex != null ? pass.documents[activeIndex] : null;
+
+  function handleOpen(_doc: PassDocument, _rowEl: HTMLButtonElement | null) {
+    const idx = pass!.documents.findIndex((d) => d === _doc);
+    if (idx < 0) return;
+    if (_doc.type === 'external' || _doc.type === 'iframe') {
+      window.open(_doc.src, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setActiveIndex(idx);
+  }
+
+  function handleClose() {
+    const idxToFocus = activeIndex;
+    setActiveIndex(null);
+    if (idxToFocus != null) {
+      window.setTimeout(() => {
+        rowRefs.current.get(idxToFocus)?.focus();
+      }, 50);
+    }
+  }
 
   return (
-    <div className="min-h-screen w-full bg-bg-app flex flex-col items-center">
-      <div className="w-full max-w-wallet flex flex-col">
+    <div className="min-h-screen w-full bg-bg-app flex flex-col items-center relative overflow-x-hidden">
+      <div
+        className="w-full max-w-wallet flex flex-col"
+        aria-hidden={activeDoc ? true : undefined}
+      >
         <header className="px-5 pt-14 pb-4 flex items-center justify-between">
           <BackButton onClick={() => navigate('/')} />
-          {pass.isExtra && (
-            <span className="px-2 py-1 rounded bg-accent-blue text-white font-sf font-semibold text-[11px] uppercase tracking-[0.08em]">
-              Extra
-            </span>
-          )}
         </header>
 
         <main className="px-5 pb-24">
@@ -58,56 +91,70 @@ export function PassDetail() {
               {pass.caption}
             </p>
 
-            {pass.isExtra && pass.extraCaption && (
-              <p className="font-sf text-[15px] text-text-tertiary mt-2 leading-snug italic">
-                {pass.extraCaption}
+            {/* Metadata strip (for markdown-primary passes only) */}
+            {showMetadataStrip && primaryDoc && (
+              <MetadataHeaderStrip src={primaryDoc.src} />
+            )}
+
+            {/* Reflection paragraph (only when set) */}
+            {!reflectionIsPlaceholder && pass.reflection && (
+              <p className="font-sf italic text-[15px] text-text-tertiary mt-4 mb-2 leading-relaxed">
+                {pass.reflection}
               </p>
             )}
           </motion.div>
 
-          {/* Reflection card */}
-          {!pass.isVisitorPass && (
+          {/* Visitor pass keeps its custom feed */}
+          {pass.isVisitorPass ? (
             <motion.section
-              aria-labelledby="reflection-heading"
-              className="mt-6 rounded-card-content bg-bg-card-white shadow-card p-5"
+              aria-label="Visitor signatures"
+              className="mt-6"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.22, ease: 'easeOut' }}
+              transition={{ duration: 0.3, delay: 0.3, ease: 'easeOut' }}
             >
-              <h2
-                id="reflection-heading"
-                className="font-sf font-semibold text-[15px] uppercase tracking-[0.08em] text-text-tertiary"
-              >
-                Reflection
-              </h2>
-              {reflectionIsPlaceholder ? (
-                <p className="mt-2 font-sf text-[17px] text-text-tertiary italic">
-                  Reflection coming soon.
-                </p>
-              ) : (
-                <p className="mt-2 font-sf text-[17px] text-text-secondary leading-relaxed whitespace-pre-line">
-                  {pass.reflection}
-                </p>
-              )}
-            </motion.section>
-          )}
-
-          {/* Asset / Visitor feed */}
-          <motion.section
-            aria-label={pass.isVisitorPass ? 'Visitor signatures' : `${pass.title} artifact`}
-            className="mt-6"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.3, ease: 'easeOut' }}
-          >
-            {pass.isVisitorPass ? (
               <VisitorFeed />
-            ) : (
-              <AssetEmbed asset={pass.asset} title={pass.title} />
-            )}
-          </motion.section>
+            </motion.section>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.3, ease: 'easeOut' }}
+            >
+              <DocumentList
+                documents={pass.documents}
+                cardStyle={pass.cardStyle}
+                onOpen={handleOpen}
+                registerRowRef={(i, el) => {
+                  if (el) rowRefs.current.set(i, el);
+                  else rowRefs.current.delete(i);
+                }}
+              />
+            </motion.div>
+          )}
         </main>
       </div>
+
+      <AnimatePresence>
+        {activeDoc && (
+          <ViewerForDocument key={`${pass.id}-${activeIndex}`} doc={activeDoc} onClose={handleClose} />
+        )}
+      </AnimatePresence>
     </div>
   );
+}
+
+function ViewerForDocument({ doc, onClose }: { doc: PassDocument; onClose: () => void }) {
+  switch (doc.type) {
+    case 'markdown':
+      return <DocumentViewer src={doc.src} onClose={onClose} />;
+    case 'image':
+      return <ImageViewer src={doc.src} alt={doc.title} onClose={onClose} />;
+    case 'pdf':
+      return <PdfViewer src={doc.src} title={doc.title} onClose={onClose} />;
+    case 'video':
+      return <VideoViewer src={doc.src} title={doc.title} onClose={onClose} />;
+    default:
+      return null;
+  }
 }

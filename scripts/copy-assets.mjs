@@ -22,6 +22,8 @@ const ROOT = path.resolve(__dirname, '..');
 
 const SOURCES = [
   { from: 'docs/pre-existing-work', to: 'public/assets', byExt: true },
+  { from: 'docs/pre-existing-work/work-markdown', to: 'public/assets/markdown', byExt: false },
+  { from: 'docs/pre-existing-work/work-images', to: 'public/assets/images', byExt: false },
   { from: 'docs/images', to: 'public/assets/images', byExt: false },
   { from: 'docs/design-tokens/sf-symbols', to: 'public/assets/icons', byExt: false },
 ];
@@ -33,6 +35,7 @@ const EXT_MAP = {
   '.jpeg': 'images',
   '.webp': 'images',
   '.svg': 'icons',
+  '.md': 'markdown',
   '.mp4': 'extras',
   '.mov': 'extras',
   '.webm': 'extras',
@@ -88,6 +91,7 @@ async function main() {
     ensureDir(path.join(ROOT, 'public/assets/images')),
     ensureDir(path.join(ROOT, 'public/assets/icons')),
     ensureDir(path.join(ROOT, 'public/assets/extras')),
+    ensureDir(path.join(ROOT, 'public/assets/markdown')),
   ]);
 
   let total = 0;

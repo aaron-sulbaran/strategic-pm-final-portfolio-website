@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import type { Pass } from '../data/passes';
+import { PORTFOLIO_TOTAL, type Pass } from '../data/passes';
 
 type Variant = 'stack' | 'hero';
 
@@ -24,11 +24,7 @@ export function PassCard({
   const labelTone = isWhite ? 'text-white/95' : 'text-black/85';
   const subtitleTone = isWhite ? 'text-white/70' : 'text-black/55';
 
-  const subtitle = pass.isVisitorPass
-    ? 'Sign In'
-    : pass.isExtra
-    ? 'Extra'
-    : pass.category;
+  const subtitle = pass.isVisitorPass ? 'Sign In' : pass.category;
 
   const ariaLabel = `${pass.title}, ${subtitle}`;
 
@@ -74,7 +70,7 @@ export function PassCard({
           <span
             className={`font-sf font-semibold text-[12px] tracking-[0.06em] uppercase pass-label-shadow ${subtitleTone}`}
           >
-            {String(pass.number).padStart(2, '0')} of 12
+            {String(pass.number).padStart(2, '0')} of {PORTFOLIO_TOTAL}
           </span>
         </div>
       )}
